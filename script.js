@@ -1,4 +1,3 @@
-// Backend URL (replace with your actual backend URL on Render)
 const backendUrl = "https://aes-image-encryption-backend1.onrender.com";
 
 // Event listener for the Encrypt button
