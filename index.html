@@ -7,11 +7,9 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
     <div class="container">
         <h1>AES Image Encryption</h1>
 
-        <!-- Image Upload Form -->
         <form id="formData">
             <div class="form-group">
                 <label for="image">Upload Image:</label>
@@ -28,15 +26,15 @@
                 <button type="button" id="decrypt-btn">Decrypt Image</button>
             </div>
         </form>
+
         <div class="result">
             <h2>Result:</h2>
             <p id="output-message"></p>
             <img id="output-image" src="" alt="Output Image" style="display:none;">
             <button id="download-btn" style="display:none;">Download Image</button>
         </div>
-        
+    </div>
 
-    <!-- Link to the JavaScript file -->
     <script src="script.js"></script>
 </body>
 </html>
