@@ -1,82 +1,86 @@
-from flask import Flask, request, render_template, jsonify, send_file
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-from PIL import Image
+import base64
 import io
-import os
+from PIL import Image, UnidentifiedImageError
 
 app = Flask(__name__)
-
-UPLOAD_FOLDER = './static/images'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
+CORS(app)
 
 @app.route('/encrypt', methods=['POST'])
 def encrypt():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image uploaded'}), 400
+    try:
+        key = request.form.get('key')
+        image = request.files.get('image')
 
-    image_file = request.files['image']
-    key = request.form['key']
+        if not key or not image:
+            return jsonify({"error": "Key and image file are required."}), 400
 
-    if len(key) not in (16, 24, 32):
-        return jsonify({'error': 'Invalid key length'}), 400
+        if len(key) not in [16, 24, 32]:
+            return jsonify({"error": "Invalid key length. Must be 16, 24, or 32 bytes."}), 400
 
-    # Load and encrypt the image
-    image = Image.open(image_file)
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    image_bytes = img_byte_arr.getvalue()
+        key = key.encode('utf-8')
+        image_data = image.read()
 
-    # Encrypt the image
-    cipher = AES.new(key.encode(), AES.MODE_CBC)
-    ct_bytes = cipher.encrypt(pad(image_bytes, AES.block_size))
-    iv = cipher.iv
-    encrypted_image = iv + ct_bytes
+        cipher = AES.new(key, AES.MODE_EAX)
+        ciphertext, tag = cipher.encrypt_and_digest(image_data)
 
-    # Save the encrypted image to a file
-    encrypted_image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'encrypted_image.png')
-    with open(encrypted_image_path, 'wb') as f:
-        f.write(encrypted_image)
+        # Combine nonce, tag, and ciphertext
+        encrypted_data = cipher.nonce + tag + ciphertext
+        encrypted_image = base64.b64encode(encrypted_data).decode('utf-8')
+        return jsonify({"encrypted_image": encrypted_image})
 
-    # Return the encrypted file for download
-    return send_file(encrypted_image_path, as_attachment=True)
+    except Exception as e:
+        print("Encryption error:", e)
+        return jsonify({"error": "An error occurred during encryption."}), 500
 
 @app.route('/decrypt', methods=['POST'])
 def decrypt():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image uploaded'}), 400
-    
-    encrypted_file = request.files['image']
-    key = request.form['key']
+    try:
+        encrypted_file = request.files.get('encrypted_image')
+        key = request.form.get('key')
 
-    if len(key) not in (16, 24, 32):
-        return jsonify({'error': 'Invalid key length'}), 400
+        if not key or not encrypted_file:
+            return jsonify({"error": "Key and encrypted image file are required."}), 400
 
-    # Read the encrypted file
-    encrypted_image = encrypted_file.read()
+        if len(key) not in [16, 24, 32]:
+            return jsonify({"error": "Invalid key length. Must be 16, 24, or 32 bytes."}), 400
 
-    # Split the IV and the actual encrypted data
-    iv = encrypted_image[:16]  # The first 16 bytes are the IV
-    encrypted_image = encrypted_image[16:]  # The rest is the encrypted data
+        key = key.encode('utf-8')
+        encrypted_data = base64.b64decode(encrypted_file.read())
 
-    # Decrypt the image
-    cipher = AES.new(key.encode(), AES.MODE_CBC, iv)
-    decrypted_image_bytes = unpad(cipher.decrypt(encrypted_image), AES.block_size)
+        # Extract nonce, tag, and ciphertext
+        nonce = encrypted_data[:16]  # First 16 bytes are the nonce
+        tag = encrypted_data[16:32]  # Next 16 bytes are the tag
+        ciphertext = encrypted_data[32:]  # Remaining bytes are the ciphertext
 
-    # Convert decrypted bytes back to an image
-    decrypted_image = Image.open(io.BytesIO(decrypted_image_bytes))
-    decrypted_image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'decrypted_image.png')
-    decrypted_image.save(decrypted_image_path)
+        # Decrypt the ciphertext
+        try:
+            cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+            decrypted_image_bytes = cipher.decrypt_and_verify(ciphertext, tag)
+        except ValueError as e:
+            print("Decryption error: MAC check failed. Ensure correct key and encrypted data are used.")
+            return jsonify({"error": "Decryption failed. The key may be incorrect, or the file may be corrupted."}), 400
 
-    # Return the decrypted image for download
-    return send_file(decrypted_image_path, as_attachment=True)
+        # Validate and load the decrypted bytes as an image
+        try:
+            img_byte_arr = io.BytesIO(decrypted_image_bytes)
+            decrypted_image = Image.open(img_byte_arr)
+            decrypted_image.verify()  # Ensure the bytes form a valid image
+        except UnidentifiedImageError as e:
+            print("Decrypted bytes do not form a valid image:", e)
+            return jsonify({"error": "Decrypted data is not a valid image. Ensure the correct key and file are used."}), 400
 
-if __name__ == '__main__':
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-    app.run(debug=True)
+        # Convert the valid image to base64 for frontend display
+        img_byte_arr.seek(0)
+        decrypted_image_base64 = base64.b64encode(img_byte_arr.read()).decode('utf-8')
+
+        return jsonify({"decrypted_image": decrypted_image_base64})
+
+    except Exception as e:
+        print("Decryption error:", e)
+        return jsonify({"error": "An unexpected error occurred during decryption."}), 500
+
+if __name__ == "__main__":
+    app.run()
