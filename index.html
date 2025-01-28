@@ -4,13 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AES Image Encryption</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="container">
         <h1>AES Image Encryption</h1>
-
-        <form id="formData">
+        <form id="image-form">
             <div class="form-group">
                 <label for="image">Upload Image:</label>
                 <input type="file" id="image" name="image" accept="image/*" required>
@@ -35,6 +34,11 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <footer>
+        <p>Connect with me on 
+            <a href="https://www.linkedin.com/in/darshak-kamalia?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" target="_blank">LinkedIn</a>
+        </p>
+    </footer>
 </body>
 </html>
